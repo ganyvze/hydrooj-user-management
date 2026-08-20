@@ -2,18 +2,19 @@
 
 一个为 HydroOJ 提供可视化用户管理功能的插件，允许管理员在控制面板中方便地管理用户信息、权限和状态。
 
-> 代码很简单，佛系不定期更新~
->
-> 如果认为好用请给我点一个star，不胜感激。
-
 ## 安装方法
 
 ```bash
-sudo su
-cd /root/.hydro/
-git clone https://github.com/SummerofOrange/hydrooj-user-management
-hydrooj addon add /root/.hydro/hydrooj-user-management
+cd /root/.hydro/addons
+git clone https://github.com/ganyvze/hydrooj-user-management
+hydrooj addon add /root/.hydro/addons/hydrooj-user-management
 pm2 restart hydrooj
+```
+
+一键安装：
+
+```bash
+cd /root/.hydro/addons && git clone https://github.com/ganyvze/hydrooj-user-management && hydrooj addon add /root/.hydro/addons/hydrooj-user-management && pm2 restart hydrooj
 ```
 
 ## 使用方法
@@ -53,24 +54,6 @@ pm2 restart hydrooj
 - ✅ 权限保护：防止非超级管理员修改超级管理员账户
 - ✅ 数据验证：自动验证用户名和邮箱的唯一性
 - ✅ 输入验证：前端和后端双重验证用户输入
-
-## 开发说明
-
-### 贡献代码
-
-欢迎提交 Issue 和 Pull Request 来改进这个插件。
-
-## 许可证
-
-MIT License
-
-## 支持
-
-如果您在使用过程中遇到问题，请：
-
-1. 查看 [Issues](https://github.com/SummerofOrange/hydrooj-user-management/issues) 页面
-2. 提交新的 Issue 描述您的问题
-3. 联系作者获取技术支持
 
 ---
 
