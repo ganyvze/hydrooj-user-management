@@ -180,40 +180,6 @@
         </button>
       </div>
     </form>
-
-    <h3>{{ _('Temporary Privilege') }}</h3>
-    {% if privTemp %}
-    <p class="help-text">
-      {{ _('Active temporary privilege') }}: {{ privTemp.targetPriv }}
-      ({{ _('expires at') }} {{ moment(privTemp.expireAt).format('YYYY-MM-DD HH:mm') }},
-      {{ _('will revert to') }} {{ privTemp.originalPriv }})
-    </p>
-    {% endif %}
-    <form method="post" class="row">
-      <input type="hidden" name="operation" value="setTempPriv">
-      <div class="medium-4 columns">
-        {{ form.form_text({
-          label: _('Temporary Privilege Value'),
-          name: 'priv',
-          value: udoc.priv,
-          type: 'number'
-        }) }}
-      </div>
-      <div class="medium-4 columns">
-        {{ form.form_text({
-          label: _('Duration (days)'),
-          name: 'days',
-          value: 1,
-          type: 'number'
-        }) }}
-      </div>
-      <div class="medium-4 columns">
-        <label>&nbsp;</label>
-        <button type="submit" class="rounded button warning" onclick="return confirm('{{ _('Set temporary privilege? It will auto revert after expiry.') }}')">
-          <span class="icon icon-time"></span> {{ _('Set Temporary Privilege') }}
-        </button>
-      </div>
-    </form>
   </div>
 </div>
 

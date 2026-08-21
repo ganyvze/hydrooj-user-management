@@ -1,22 +1,11 @@
 import {
     Context, Handler, param, PRIV, Types, UserModel, DomainModel,
-    ValidationError, UserNotFoundError, PermissionError, Time, SystemModel, moment, db
+    ValidationError, UserNotFoundError, PermissionError, Time, SystemModel, moment
 } from 'hydrooj';
-
-// 临时权限授予记录集合
-const privTempColl = db.collection('user_privtemp');
-
-interface PrivTempDoc {
-    _id: number; // 用户 ID
-    originalPriv: number; // 授权前的原始权限
-    targetPriv: number; // 临时授予的目标权限
-    expireAt: Date; // 到期时间
-}
 
 declare module 'hydrooj' {
     interface Collections {
-        // 临时用户权限记录
-        user_privtemp: PrivTempDoc;
+        // 扩展用户集合类型
     }
 }
 
@@ -92,13 +81,11 @@ class UserManageDetailHandler extends UserManageHandler {
         if (!udoc) throw new UserNotFoundError(uid);
         
         const dudoc = await DomainModel.getDomainUser(domainId, udoc);
-        const privTemp = await privTempColl.findOne({ _id: uid });
         
         this.response.template = 'user_manage_detail.html';
         this.response.body = {
             udoc,
             dudoc,
-            privTemp,
             canEdit: true,
             moment
         };
@@ -116,8 +103,6 @@ class UserManageDetailHandler extends UserManageHandler {
             await this.postResetPassword(domainId, uid);
         } else if (operation === 'setPriv') {
             await this.postSetPriv(domainId, uid);
-        } else if (operation === 'setTempPriv') {
-            await this.postSetTempPriv(domainId, uid);
         } else if (operation === 'ban') {
             await this.postBan(domainId, uid);
         } else if (operation === 'unban') {
@@ -189,8 +174,6 @@ class UserManageDetailHandler extends UserManageHandler {
         }
         
         await UserModel.setPriv(uid, priv);
-        // 手动设置永久权限时，取消该用户未到期的临时权限，避免到期后覆盖本次修改
-        await privTempColl.deleteOne({ _id: uid });
     }
     
     @param('uid', Types.Int)
@@ -204,7 +187,6 @@ class UserManageDetailHandler extends UserManageHandler {
         }
         
         await UserModel.ban(uid, 'Banned by administrator');
-        await privTempColl.deleteOne({ _id: uid });
     }
     
     @param('uid', Types.Int)
@@ -215,30 +197,6 @@ class UserManageDetailHandler extends UserManageHandler {
         // 恢复为默认权限
         const defaultPriv = await SystemModel.get('default.priv');
         await UserModel.setPriv(uid, defaultPriv);
-        await privTempColl.deleteOne({ _id: uid });
-    }
-    
-    @param('uid', Types.Int)
-    @param('priv', Types.Int)
-    @param('days', Types.PositiveInt)
-    async postSetTempPriv(domainId: string, uid: number, priv: number, days: number) {
-        const udoc = await UserModel.getById(domainId, uid);
-        if (!udoc) throw new UserNotFoundError(uid);
-        
-        // 不允许修改超级管理员权限（除非当前用户也是超级管理员）
-        if ((udoc.priv === PRIV.PRIV_ALL || priv === PRIV.PRIV_ALL) && this.user.priv !== PRIV.PRIV_ALL) {
-            throw new PermissionError('Cannot modify super admin privileges');
-        }
-        
-        const expireAt = new Date(Date.now() + days * Time.day);
-        // 仅在首次记录时保存原始权限，重复授权时保留最初的 originalPriv，
-        // 保证到期后始终恢复到最初被临时修改前的权限。
-        await privTempColl.updateOne(
-            { _id: uid },
-            { $set: { targetPriv: priv, expireAt }, $setOnInsert: { originalPriv: udoc.priv } },
-            { upsert: true },
-        );
-        await UserModel.setPriv(uid, priv);
     }
 }
 
@@ -251,20 +209,6 @@ export async function apply(ctx: Context) {
     
     // 在控制面板侧边栏添加用户管理菜单项
     ctx.injectUI('ControlPanel', 'user_manage_main', { icon: 'user' });
-    
-    // 定期检查并回收已到期的临时权限
-    ctx.interval(async () => {
-        try {
-            const now = new Date();
-            for (;;) {
-                const doc = await privTempColl.findOneAndDelete({ expireAt: { $lte: now } });
-                if (!doc) break;
-                await UserModel.setPriv(doc._id, doc.originalPriv);
-            }
-        } catch (e) {
-            console.error('user_manage: failed to revert temporary privileges', e);
-        }
-    }, 60 * 1000);
     
     // 添加国际化支持
     ctx.i18n.load('zh', {
@@ -328,16 +272,7 @@ export async function apply(ctx: Context) {
         'Current Privilege': '当前权限',
         'Ban User': '封禁用户',
         'Unban User': '解封用户',
-        'Copy User ID': '复制用户ID',
-
-        'Temporary Privilege': '临时权限',
-        'Temporary Privilege Value': '临时权限值',
-        'Duration (days)': '持续天数',
-        'Set Temporary Privilege': '设置临时权限',
-        'Set temporary privilege? It will auto revert after expiry.': '确定设置临时权限？到期后会自动恢复原权限。',
-        'Active temporary privilege': '生效中的临时权限',
-        'expires at': '到期时间',
-        'will revert to': '到期后恢复为'
+        'Copy User ID': '复制用户ID'
     });
     
     ctx.i18n.load('en', {
@@ -402,15 +337,6 @@ export async function apply(ctx: Context) {
         'Current Privilege': 'Current Privilege',
         'Ban User': 'Ban User',
         'Unban User': 'Unban User',
-        'Copy User ID': 'Copy User ID',
-
-        'Temporary Privilege': 'Temporary Privilege',
-        'Temporary Privilege Value': 'Temporary Privilege Value',
-        'Duration (days)': 'Duration (days)',
-        'Set Temporary Privilege': 'Set Temporary Privilege',
-        'Set temporary privilege? It will auto revert after expiry.': 'Set temporary privilege? It will auto revert after expiry.',
-        'Active temporary privilege': 'Active temporary privilege',
-        'expires at': 'expires at',
-        'will revert to': 'will revert to'
+        'Copy User ID': 'Copy User ID'
     });
 }
