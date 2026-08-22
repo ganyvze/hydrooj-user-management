@@ -4,6 +4,12 @@ import {
 } from 'hydrooj';
 
 declare module 'hydrooj' {
+    interface User {
+        tempPriv?: {
+            originalPriv: number;
+            expireAt: Date;
+        };
+    }
     interface Collections {
         // 扩展用户集合类型
     }
@@ -164,7 +170,8 @@ class UserManageDetailHandler extends UserManageHandler {
     
     @param('uid', Types.Int)
     @param('priv', Types.Int)
-    async postSetPriv(domainId: string, uid: number, priv: number) {
+    @param('days', Types.String, true)
+    async postSetPriv(domainId: string, uid: number, priv: number, daysStr?: string) {
         const udoc = await UserModel.getById(domainId, uid);
         if (!udoc) throw new UserNotFoundError(uid);
         
@@ -173,7 +180,24 @@ class UserManageDetailHandler extends UserManageHandler {
             throw new PermissionError('Cannot modify super admin privileges');
         }
         
-        await UserModel.setPriv(uid, priv);
+        const days = parseInt(daysStr || '0', 10);
+        
+        if (days > 0) {
+            // 临时修改：保留原权限，并计算过期时间
+            const originalPriv = udoc.tempPriv?.originalPriv ?? udoc.priv; // 如果已在临时状态中，保留最初权限
+            const expireAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+            
+            await UserModel.setById(uid, {
+                priv,
+                tempPriv: { originalPriv, expireAt }
+            });
+        } else {
+            // 永久修改：设定权限并清空临时标记
+            await UserModel.setById(uid, {
+                priv,
+                tempPriv: null
+            });
+        }
     }
     
     @param('uid', Types.Int)
@@ -187,6 +211,8 @@ class UserManageDetailHandler extends UserManageHandler {
         }
         
         await UserModel.ban(uid, 'Banned by administrator');
+        // 清空临时权限计时，防止定时器将其复活
+        await UserModel.setById(uid, { tempPriv: null }); 
     }
     
     @param('uid', Types.Int)
@@ -196,7 +222,10 @@ class UserManageDetailHandler extends UserManageHandler {
         
         // 恢复为默认权限
         const defaultPriv = await SystemModel.get('default.priv');
-        await UserModel.setPriv(uid, defaultPriv);
+        await UserModel.setById(uid, { 
+            priv: defaultPriv, 
+            tempPriv: null
+        });
     }
 }
 
@@ -206,6 +235,26 @@ export async function apply(ctx: Context) {
     // 注册路由
     ctx.Route('user_manage_main', '/manage/users', UserManageMainHandler, PRIV.PRIV_EDIT_SYSTEM);
     ctx.Route('user_manage_detail', '/manage/users/:uid', UserManageDetailHandler, PRIV.PRIV_EDIT_SYSTEM);
+    
+    // 定时任务：每 1 分钟检查并恢复过期的临时权限
+    const checkInterval = setInterval(async () => {
+        try {
+            const expiredUsers = await UserModel.getMulti({
+                'tempPriv.expireAt': { $lte: new Date() }
+            }).toArray();
+            
+            for (const udoc of expiredUsers) {
+                await UserModel.setById(udoc._id, {
+                    priv: udoc.tempPriv.originalPriv,
+                    tempPriv: null
+                });
+            }
+        } catch (e) {
+            console.error('[UserManagement] failed to check expired privileges:', e);
+        }
+    }, 60 * 1000);
+
+    ctx.on('dispose', () => clearInterval(checkInterval)); // 插件卸载时清理定时器
     
     // 在控制面板侧边栏添加用户管理菜单项
     ctx.injectUI('ControlPanel', 'user_manage_main', { icon: 'user' });
@@ -272,7 +321,14 @@ export async function apply(ctx: Context) {
         'Current Privilege': '当前权限',
         'Ban User': '封禁用户',
         'Unban User': '解封用户',
-        'Copy User ID': '复制用户ID'
+        'Copy User ID': '复制用户ID',
+
+        'Duration (Days)': '临时修改天数',
+        'Leave blank for permanent': '留空表示永久修改',
+        'Temporary until': '临时权限，到期时间',
+        'Original Privilege': '原权限',
+        'Enter duration in days (leave blank for permanent):': '请输入修改天数（留空表示永久）',
+        'Invalid days value': '无效的天数'
     });
     
     ctx.i18n.load('en', {
@@ -337,6 +393,13 @@ export async function apply(ctx: Context) {
         'Current Privilege': 'Current Privilege',
         'Ban User': 'Ban User',
         'Unban User': 'Unban User',
-        'Copy User ID': 'Copy User ID'
+        'Copy User ID': 'Copy User ID',
+
+        'Duration (Days)': 'Duration (Days)',
+        'Leave blank for permanent': 'Leave blank for permanent',
+        'Temporary until': 'Temporary until',
+        'Original Privilege': 'Original Privilege',
+        'Enter duration in days (leave blank for permanent):': 'Enter duration in days (leave blank for permanent):',
+        'Invalid days value': 'Invalid days value'
     });
 }

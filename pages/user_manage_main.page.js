@@ -90,6 +90,17 @@ const page = new NamedPage('user_manage_main', () => {
       Notification.error(i18n('Invalid privilege value'));
       return;
     }
+
+    // 询问修改天数
+    const daysStr = prompt(i18n('Enter duration in days (leave blank for permanent):'), '');
+    let days = null;
+    if (daysStr !== null && daysStr.trim() !== '') {
+      days = parseInt(daysStr, 10);
+      if (isNaN(days) || days <= 0) {
+        Notification.error(i18n('Invalid days value'));
+        return;
+      }
+    }
     
     if (!confirm(i18n('Are you sure to set privilege of user {0} to {1}?', username, privValue))) {
       return;
@@ -98,7 +109,8 @@ const page = new NamedPage('user_manage_main', () => {
     try {
       const response = await request.post(`/manage/users/${uid}`, {
         operation: 'setPriv',
-        priv: privValue
+        priv: privValue,
+        days: days
       });
       
       if (response.success) {

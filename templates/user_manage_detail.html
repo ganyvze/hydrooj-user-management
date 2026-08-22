@@ -126,6 +126,11 @@
               <span class="badge badge--blue">Other</span>
             {% endif %}
             <br><small>({{ udoc.priv }})</small>
+            <!-- 如果处于临时状态，显示过期时间与原权限 -->
+            {% if udoc.tempPriv %}
+              <br><small style="color:#3498db"><span class="icon icon-time"></span> {{ _('Temporary until') }}: {{ moment(udoc.tempPriv.expireAt).format('YYYY-MM-DD HH:mm') }}</small>
+              <br><small class="text-gray">{{ _('Original Privilege') }}: {{ udoc.tempPriv.originalPriv }}</small>
+            {% endif %}
           </dd>
           
           {% if dudoc %}
@@ -163,6 +168,14 @@
           value: udoc.priv,
           type: 'number'
         }) }}
+        <!-- 天数输入框 -->
+        {{ form.form_text({
+          label: _('Duration (Days)'),
+          name: 'days',
+          type: 'number',
+          value: '',
+          placeholder: _('Leave blank for permanent')
+        }) }}
         <p class="help-text">
           {{ _('Common values') }}:<br>
           -1: root<br>
@@ -171,6 +184,8 @@
           8: Guest<br>
           16842756: Default<br>
           {{ _('Other values will be marked as "Other"') }}
+          <!-- 提示语 -->
+          <strong class="text-blue">{{ _('Leave blank for permanent') }}</strong>
         </p>
       </div>
       <div class="medium-6 columns">
